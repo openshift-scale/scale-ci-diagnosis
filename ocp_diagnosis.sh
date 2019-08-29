@@ -89,7 +89,7 @@ function capture_wal() {
 	echo "creating a tarball of the captured DB at $OUTPUT_DIR"
 	XZ_OPT=--threads=0 tar cJf $OUTPUT_DIR/prometheus-$ts.tar.xz $OUTPUT_DIR/wal
 	if [[ $? == 0 ]]; then
-		rm -rf wal
+		rm -rf $OUTPUT_DIR/wal
 	fi
 }
 
@@ -102,7 +102,7 @@ function capture_full_db() {
 	echo "creating a tarball of the captured DB at $OUTPUT_DIR"
 	XZ_OPT=--threads=0 tar cJf $OUTPUT_DIR/prometheus-$ts.tar.xz -C $OUTPUT_DIR/data .
 	if [[ $? == 0 ]]; then
-		rm -rf data
+		rm -rf $OUTPUT_DIR/data
 	fi
 }
 
