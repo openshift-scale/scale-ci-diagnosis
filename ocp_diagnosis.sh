@@ -14,6 +14,7 @@ function help() {
 	printf "\t PROMETHEUS_CAPTURE_TYPE=str,          str=wal or full, wal captures the write ahead log and full captures the entire prometheus DB\n"
 	printf "\t OPENSHIFT_MUST_GATHER=str,            str=true or false, gathers cluster data including information about all the operator managed components\n"
 	printf "\t STORAGE_MODE=str,                     str=pbench, moves the results to the pbench results dir to be shipped to the pbench server in case the tool is run using pbench\n"
+	printf "\t DATA_SERVER_URL=str                   str=url that points to an http server that hosts data"
 }
 
 echo "==========================================================================="
@@ -44,22 +45,18 @@ if [[ -z "$OPENSHIFT_MUST_GATHER" ]]; then
 	exit 1
 fi
 
-if [[ -z "$STORAGE_MODE" ]]; then
-	echo "Looke like STORAGE_MODE is not defined, storing the results on local file system"
-fi
-
 # Check for kubeconfig
 if [[ -z $KUBECONFIG ]] && [[ ! -s $HOME/.kube/config ]]; then
-        echo "KUBECONFIG var is not defined and cannot find kube config in the home directory, please check"
-        exit 1
+    echo "KUBECONFIG var is not defined and cannot find kube config in the home directory, please check"
+    exit 1
 fi
 
 # Check if oc client is installed
 which oc &>/dev/null
 echo "Checking if oc client is installed"
-if [[ $? != 0 ]]; then
-        echo "oc client is not installed, please install"
-        exit 1
+if [[ $? -ne 0 ]]; then
+    echo "oc client is not installed, please install"
+    exit 1
 else
 	echo "oc client is present"
 fi
@@ -70,51 +67,66 @@ prometheus_pod=$(oc get pods -n $prometheus_namespace | grep -w "Running" | awk 
 # get the timestamp
 ts=$(date +"%Y%m%d-%H%M%S")
 
-# set the output_dir to pbench results dir
-if [[ "$STORAGE_MODE" == "pbench" ]]; then
-	echo "Detected sotrage mode as $STORAGE_MODE"
-	echo "Assuming that the ocp diagnosis tool is run using pbench-user-benchmark"
-	echo "Fetching the latest pbench results dir"
-	result_dir="/var/lib/pbench-agent/$(ls -t /var/lib/pbench-agent/ | grep "pbench-user" | head -1)"/1/reference-result
-        echo "Copying the collected data to $result_dir"
-        export OUTPUT_DIR="/var/lib/pbench-agent/$(ls -t /var/lib/pbench-agent/ | grep "pbench-user" | head -1)"/1
-fi
-
-# copy the prometheus write ahead log from the prometheus pod
 function capture_wal() {
 	echo "================================================================================="
 	echo "               copying prometheus wal from $prometheus_pod                       "
 	echo "================================================================================="
 	oc cp $prometheus_namespace/$prometheus_pod:/prometheus/wal -c prometheus $OUTPUT_DIR/wal/
-	echo "creating a tarball of the captured DB at $OUTPUT_DIR"
 	XZ_OPT=--threads=0 tar cJf $OUTPUT_DIR/prometheus-$ts.tar.xz $OUTPUT_DIR/wal
-	if [[ $? == 0 ]]; then
+	if [[ $? -eq 0 ]]; then
 		rm -rf $OUTPUT_DIR/wal
 	fi
 }
 
-# copy the entire DB from the prometheus pod
+
 function capture_full_db() {
 	echo "================================================================================="
 	echo "            copying the entire prometheus DB from $prometheus_pod                "
 	echo "================================================================================="
 	oc cp  $prometheus_namespace/$prometheus_pod:/prometheus/ -c prometheus $OUTPUT_DIR/data/
-	echo "creating a tarball of the captured DB at $OUTPUT_DIR"
 	XZ_OPT=--threads=0 tar cJf $OUTPUT_DIR/prometheus-$ts.tar.xz -C $OUTPUT_DIR/data .
-	if [[ $? == 0 ]]; then
+	if [[ $? -eq 0 ]]; then
 		rm -rf $OUTPUT_DIR/data
 	fi
 }
 
+
 function must_gather() {
-	echo "================================================================================="
-	echo "                     Running OpenShift must-gather                               "
-	echo "================================================================================="
-	echo "Asssuming the oc client on the host supports collecting must-gather"
 	oc adm must-gather --dest-dir=$OUTPUT_DIR/must-gather-$ts
+	XZ_OPT=--threads=0 tar cJf $OUTPUT_DIR/must-gather-$ts.tar.xz $OUTPUT_DIR/must-gather-$ts
+	if [[ $? -eq 0 ]]; then
+		rm -rf $OUTPUT_DIR/must-gather-$ts
+	fi
 }
-	
-if [[ "$PROMETHEUS_CAPTURE" == "true" ]]; then
+
+
+function post_to_server() {
+	# parameters
+	# 	1 data filepath
+
+	echo "Store on server: $1"
+	curl $DATA_SERVER_URL/api --form file=@"$1"
+	if [[ $? -eq 0 ]]; then
+		rm -rf "$1"
+	fi
+}
+
+
+function validate_server_is_up() {
+	# return
+	# 	http request code
+
+	curl $DATA_SERVER_URL 1>/dev/null
+	if [[ $? -eq 0 ]]; then
+		echo "Storage chosen is data server."
+	else
+		echo "Data server is not running. Curl error code: $?"
+	fi
+	return $?
+}
+
+
+function prometheus_capture() {
 	if [[ "$PROMETHEUS_CAPTURE_TYPE" == "wal" ]]; then
 		capture_wal
 	elif [[ "$PROMETHEUS_CAPTURE_TYPE" == "full" ]]; then
@@ -123,8 +135,45 @@ if [[ "$PROMETHEUS_CAPTURE" == "true" ]]; then
 		echo "Looks like $type is not a valid option, please check"
 		help
 	fi
+}
+
+
+function set_pbench() {
+	echo "Detected storage mode as $STORAGE_MODE"
+	echo "Assuming that the ocp diagnosis tool is run using pbench-user-benchmark"
+	echo "Fetching the latest pbench results dir"
+	result_dir="/var/lib/pbench-agent/$(ls -t /var/lib/pbench-agent/ | grep "pbench-user" | head -1)"/1-default/reference-result
+	OUTPUT_DIR="/var/lib/pbench-agent/$(ls -t /var/lib/pbench-agent/ | grep "pbench-user" | head -1)"/1-default
+	echo "Copying the collected data to $result_dir"
+}
+
+
+function store() {
+	# parameters
+	# 	1 function to capture data
+	# 	2 filename
+
+	if [[ -z $STORAGE_MODE ]]; then
+		echo "Looks like STORAGE_MODE is not defined, storing the results on local file system"
+		$1;
+	elif [[ $STORAGE_MODE == "pbench" ]]; then
+		set_pbench;
+		$1;
+	elif [[ $STORAGE_MODE == "data_server" ]]; then
+		$1 && validate_server_is_up && post_to_server "$OUTPUT_DIR/$2"
+	else
+		echo "Invalid storage mode chosen. STORAGE_MODE is $STORAGE_MODE"
+		exit 1
+	fi
+}
+
+
+if [[ $PROMETHEUS_CAPTURE == "true" ]]; then
+	store prometheus_capture "prometheus-$ts.tar.xz"
 fi
 
-if [[ "$OPENSHIFT_MUST_GATHER" == "true" ]]; then
-	must_gather
+
+if [[ $OPENSHIFT_MUST_GATHER == "true" ]]; then
+	store must_gather "must-gather-$ts.tar.xz"
 fi
+

@@ -1,6 +1,6 @@
 # scale-ci-diagnosis
 
-Tool to help diagonize issues with OpenShift clusters. It does it by:
+Tool to help diagonose issues with OpenShift clusters. It does it by:
 - capturing prometheus DB from the running prometheus pods to local file system. This can be used to look at the metrics later by running prometheus locally with the backed up DB.
 - Capturing openshift cluster information including  all the operator managed components using https://github.com/openshift/must-gather.
 
@@ -18,6 +18,7 @@ options supported:
 	PROMETHEUS_CAPTURE_TYPE=str,          str=wal or full, wal captures the write ahead log and full captures the entire prometheus DB
 	OPENSHIFT_MUST_GATHER=str,            str=true or false, gathers cluster data including information about all the operator managed components
 	STORAGE_MODE=str,                     str=pbench, moves the results to the pbench results dir to be shipped to the pbench server in case the tool is run using pbench
+	DATA_SERVER_URL=str                   str=url that points to http server that hosts data
 ```
 
 ### Pbench server for storage
@@ -29,6 +30,10 @@ In order to use pbench as the storage, the tool needs to be run using pbench and
 $ source env.sh; pbench-user-benchmark --sysinfo=none -- <path to ocp_diagnosis.sh>
 # pbench-move-results --prefix ocp-diagnosis-$(date +"%Y%m%d-%H%M%S")
 ```
+
+### Snappy data server for storage
+
+[Snappy data server](https://github.com/openshift-scale/snappy-data-server) is a second option for storage on a filesystem. The easiest option is to deploy the data server on your host. Refer to [setup](https://github.com/openshift-scale/snappy-data-server#Setup) and [usage](https://github.com/openshift-scale/snappy-data-server#Usage) to deploy the data server. Once deployed, you can read over it's API at it's `/docs` route.
 
 ### Visualize the captured data locally on prometheus server
 ```
