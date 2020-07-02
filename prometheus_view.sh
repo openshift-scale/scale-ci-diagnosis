@@ -3,7 +3,7 @@
 set -eo pipefail
 
 url=$1
-dir=/tmp/prometheus
+dir=$HOME/prometheus
 prometheus_url=https://github.com/prometheus/prometheus/releases/download/v2.7.1/prometheus-2.7.1.linux-amd64.tar.gz
 
 if  [[ "$#" -ne 1 ]]; then

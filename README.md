@@ -4,6 +4,8 @@ Tool to help diagonize issues with OpenShift clusters. It does it by:
 - capturing prometheus DB from the running prometheus pods to local file system. This can be used to look at the metrics later by running prometheus locally with the backed up DB.
 - Capturing openshift cluster information including  all the operator managed components using https://github.com/openshift/must-gather.
 
+It also supports running conformance or end-to-end tests to make sure cluster is sane.
+
 ## Run
 ```
 Edit env.sh according to the needs and run the ocp_diagnosis script:
@@ -24,12 +26,29 @@ options supported:
 In order to use pbench as the storage, the tool needs to be run using pbench and STORAGE_MODE should be set to pbench:
 
 ```
-$ source env.sh; pbench-user-benchmark --sysinfo=none ocp_diagnosis.sh
+$ source env.sh; pbench-user-benchmark --sysinfo=none -- <path to ocp_diagnosis.sh>
 # pbench-move-results --prefix ocp-diagnosis-$(date +"%Y%m%d-%H%M%S")
 ```
 
-## Visualize the captured data locally on prometheus server
+### Visualize the captured data locally on prometheus server
 ```
 $ ./prometheus_view.sh <db_tarball_url>
 ```
 This installs prometheus server and loads up the DB, the server can be accessed at https://localhost:9090.
+
+
+### Conformance
+
+Conformance runs the end-to-end test suite to check the sanity of the OpenShift cluster.
+
+Assuming that the podman is installed, conformance/e2e test can be run using the following command:
+```
+$ podman run --privileged=true --name=conformance -d -v <path-to-kubeconfig>:/root/.kube/config quay.io/openshift-scale/conformance:latest
+$ podman logs -f conformance
+```
+
+Similarly, docker can be used to run the conformance test:
+```
+$ docker run --privileged=true --name=conformance -d -v <path-to-kubeconfig>:/root/.kube/config quay.io/openshift-scale/conformance:latest
+$ docker logs -f conformance
+```
