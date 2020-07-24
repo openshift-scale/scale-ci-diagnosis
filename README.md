@@ -35,6 +35,15 @@ $ source env.sh; pbench-user-benchmark --sysinfo=none -- <path to ocp_diagnosis.
 
 [Snappy data server](https://github.com/openshift-scale/snappy-data-server) is a second option for storage on a filesystem. The easiest option is to deploy the data server on your host. Refer to [setup](https://github.com/openshift-scale/snappy-data-server#Setup) and [usage](https://github.com/openshift-scale/snappy-data-server#Usage) to deploy the data server. Once deployed, you can read over it's API at it's `/docs` route.
 
+[Snappy CLI](https://github.com/mfleader/snappyCLI) is a client you can use in your shell scripting.
+
+Declare environment variables:
+
+```shell
+DATA_SERVER_USERNAME=your_username@email.com
+DATA_SERVER_PASSWORD=your_password
+```
+
 ### Visualize the captured data locally on prometheus server
 ```
 $ ./prometheus_view.sh <db_tarball_url>

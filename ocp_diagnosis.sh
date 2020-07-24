@@ -100,32 +100,6 @@ function must_gather() {
 }
 
 
-function post_to_server() {
-	# parameters
-	# 	1 data filepath
-
-	echo "Store on server: $1"
-	curl $DATA_SERVER_URL/api --form file=@"$1"
-	if [[ $? -eq 0 ]]; then
-		rm -rf "$1"
-	fi
-}
-
-
-function validate_server_is_up() {
-	# return
-	# 	http request code
-
-	curl $DATA_SERVER_URL 1>/dev/null
-	if [[ $? -eq 0 ]]; then
-		echo "Storage chosen is data server."
-	else
-		echo "Data server is not running. Curl error code: $?"
-	fi
-	return $?
-}
-
-
 function prometheus_capture() {
 	if [[ "$PROMETHEUS_CAPTURE_TYPE" == "wal" ]]; then
 		capture_wal
@@ -160,7 +134,9 @@ function store() {
 		set_pbench;
 		$1;
 	elif [[ $STORAGE_MODE == "data_server" ]]; then
-		$1 && validate_server_is_up && post_to_server "$OUTPUT_DIR/$2"
+		snappy script-login
+		$1 && snappy post-file "$OUTPUT_DIR/$2"
+		snappy logout
 	else
 		echo "Invalid storage mode chosen. STORAGE_MODE is $STORAGE_MODE"
 		exit 1
