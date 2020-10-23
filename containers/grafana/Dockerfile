@@ -1,5 +1,15 @@
 # Dockerfile for scale-ci-diagnosis
 
+# Stage-1 to generate the rendered json files from jsonnet templates.
+FROM registry.access.redhat.com/ubi8/ubi-minimal as jsonnet-builder
+
+RUN microdnf install git make tar
+
+RUN git clone https://github.com/cloud-bulldozer/performance-dashboards.git --depth=1 dashboards
+
+RUN make -C dashboards build
+
+# Stage-2 for provisioning data source and dashboards for generated json
 FROM grafana/grafana:latest
 
 USER root
@@ -11,4 +21,4 @@ COPY datasource.yaml /etc/grafana/provisioning/datasources/datasource.yaml
 COPY provider.yaml /etc/grafana/provisioning/dashboards/provider.yaml
 
 # Setup dashboards - load openshift performance and scale default dashboards
-RUN apk add --no-cache git && git clone https://github.com/cloud-bulldozer/arsenal /tmp/arsenal && mkdir -p /etc/grafana/provisioning/dashboards && cp /tmp/arsenal/openshift-performance-dashboard/grafana/on-cluster-latest.json /etc/grafana/provisioning/dashboards/on-cluster-latest.json && cp /tmp/arsenal/openshift-performance-dashboard/grafana/etcd-on-cluster-dashboard.json /etc/grafana/provisioning/dashboards/etcd-on-cluster-dashboard.json
+COPY --from=jsonnet-builder dashboards/rendered/* /etc/grafana/provisioning/dashboards/
