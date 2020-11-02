@@ -3,11 +3,7 @@
 # Stage-1 to generate the rendered json files from jsonnet templates.
 FROM registry.access.redhat.com/ubi8/ubi-minimal as jsonnet-builder
 
-RUN microdnf install git make tar
-
-RUN git clone https://github.com/cloud-bulldozer/performance-dashboards.git --depth=1 dashboards
-
-RUN make -C dashboards build
+RUN microdnf install git make tar && git clone https://github.com/cloud-bulldozer/performance-dashboards.git --depth=1 dashboards && make -C dashboards build
 
 # Stage-2 for provisioning data source and dashboards for generated json
 FROM grafana/grafana:latest
